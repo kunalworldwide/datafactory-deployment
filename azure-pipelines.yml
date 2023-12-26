@@ -1,0 +1,132 @@
+trigger:
+- main
+
+variables:
+- group: production
+- group: development
+
+- name: adfResourcePath
+  value: /subscriptions/$(azureSubscriptionId)/resourceGroups/$(devResourceGroupName)/providers/Microsoft.DataFactory/factories/$(adfDevName)
+
+- name: workingDirectory
+  value: datafactory
+
+stages:
+ - stage: Build_ADF
+   displayName: 'Build Azure Data Factory Artifacts'
+   jobs:
+   - job: BuildAndValidate
+     displayName: 'Build and Validate ADF Artifacts'
+     pool:
+       vmImage: 'ubuntu-latest'
+     steps:
+     - task : NodeTool@0
+       displayName: 'Install Node.js'
+       inputs:
+         versionSpec: '14.x'
+     - task : Npm@1
+       displayName: 'Install npm Dependencies'
+       inputs:
+         command: 'install'
+         workingDir: '$(Build.Repository.LocalPath)/$(workingDirectory)' 
+         verbose: true
+     - task: Npm@1
+       displayName: 'Validate ADF Code'
+       inputs:
+         command: 'custom'
+         workingDir: '$(Build.Repository.LocalPath)/$(workingDirectory)'
+         customCommand: 'run build validate $(Build.Repository.LocalPath)/ $(adfResourcePath)'
+     - task: Npm@1
+       displayName: 'Generate ARM Template for ADF'
+       inputs:
+         command: 'custom'
+         workingDir: '$(Build.Repository.LocalPath)/$(workingDirectory)'
+         customCommand: 'run build export $(Build.Repository.LocalPath)/ $(adfResourcePath) "armTemplate"'
+     - task: PublishPipelineArtifact@1
+       inputs:
+         targetPath: '$(Build.Repository.LocalPath)/$(workingDirectory)/armTemplate'
+         artifact: 'ARMTemplate-AzureDataFactory'
+         publishLocation: 'pipeline'
+
+ - stage: Deploy_ADF_Dev
+   displayName: 'Deploy to Development Environment'
+   jobs:
+   - job: DeployADFToDev
+     displayName: 'Deploy Azure Data Factory to Development'
+     pool:
+       vmImage: 'ubuntu-latest'
+     steps:
+     - task: toggle-adf-trigger@2
+       displayName: 'Stop ADF Triggers'
+       inputs:
+         azureSubscription: 'master-subscription-sc'
+         ResourceGroupName: $(devResourceGroupName)
+         DatafactoryName: $(adfDevName)
+         TriggerStatus: 'stop'
+     - task : DownloadPipelineArtifact@2
+       displayName: 'Download ARM Templates for ADF'
+       inputs:
+         artifactName: 'ARMTemplate-AzureDataFactory'
+         targetPath: '$(Pipeline.Workspace)/ARMTemplate-AzureDataFactory'
+     - task: AzureResourceManagerTemplateDeployment@3
+       displayName: 'Deploy ARM Template to Development'
+       inputs:
+         deploymentScope: 'Resource Group'
+         azureResourceManagerConnection: 'master-subscription-sc'
+         subscriptionId: $(azureSubscriptionId)
+         action: 'Create Or Update Resource Group'
+         resourceGroupName: $(devResourceGroupName)
+         location: $(deploymentRegion)
+         templateLocation: 'Linked artifact'
+         csmFile: '$(Pipeline.Workspace)/ARMTemplate-AzureDataFactory/ARMTemplateForFactory.json'
+         csmParametersFile: '$(Pipeline.Workspace)/ARMTemplate-AzureDataFactory/ARMTemplateParametersForFactory.json'
+         deploymentMode: 'Incremental'
+     - task: toggle-adf-trigger@2
+       displayName: 'Start ADF Triggers'
+       inputs:
+         azureSubscription: 'master-subscription-sc'
+         ResourceGroupName: $(devResourceGroupName)
+         DatafactoryName: $(adfDevName)
+         TriggerStatus: 'start'
+
+ - stage: Deploy_ADF_Prod
+   displayName: 'Deploy to Production Environment'
+   jobs:
+   - job: DeployADFToProd
+     displayName: 'Deploy Azure Data Factory to Production'
+     pool:
+       vmImage: 'ubuntu-latest'
+     steps:
+     - task: toggle-adf-trigger@2
+       displayName: 'Stop ADF Triggers in Production'
+       inputs:
+         azureSubscription: 'PROD-SP'
+         ResourceGroupName: $(prodResourceGroupName)
+         DatafactoryName: $(adfProdName)
+         TriggerStatus: 'stop'
+     - task : DownloadPipelineArtifact@2
+       displayName: 'Download ARM Templates for Production ADF'
+       inputs:
+         artifactName: 'ARMTemplate-AzureDataFactory'
+         targetPath: '$(Pipeline.Workspace)/ARMTemplate-AzureDataFactory'
+     - task: AzureResourceManagerTemplateDeployment@3
+       displayName: 'Deploy ARM Template to Production'
+       inputs:
+         deploymentScope: 'Resource Group'
+         azureResourceManagerConnection: 'PROD-SP'
+         subscriptionId: $(azureSubscriptionId)
+         action: 'Create Or Update Resource Group'
+         resourceGroupName: $(prodResourceGroupName)
+         location: $(deploymentRegion)
+         templateLocation: 'Linked artifact'
+         csmFile: '$(Pipeline.Workspace)/ARMTemplate-AzureDataFactory/ARMTemplateForFactory.json'
+         csmParametersFile: '$(Pipeline.Workspace)/ARMTemplate-AzureDataFactory/ARMTemplateParametersForFactory.json'
+         overrideParameters: '-factoryName $(adfProdName) -AzureDataLakeStorage_properties_typeProperties_url $(prodStorageAccountUrl) -AzureDataLakeStorage_accountKey $(prodDataLakeKey)'
+         deploymentMode: 'Incremental'
+     - task: toggle-adf-trigger@2
+       displayName: 'Start ADF Triggers in Production'
+       inputs:
+         azureSubscription: 'PROD-SP'
+         ResourceGroupName: $(prodResourceGroupName)
+         DatafactoryName: $(adfProdName)
+         TriggerStatus: 'start'
