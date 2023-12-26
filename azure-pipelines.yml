@@ -35,13 +35,13 @@ stages:
        inputs:
          command: 'custom'
          workingDir: '$(Build.Repository.LocalPath)/$(workingDirectory)'
-         customCommand: 'run build validate $(Build.Repository.LocalPath)/ $(adfResourcePath)'
+         customCommand: 'run build validate $(Build.Repository.LocalPath)/$(workingDirectory)/ $(adfResourcePath)'
      - task: Npm@1
        displayName: 'Generate ARM Template for ADF'
        inputs:
          command: 'custom'
          workingDir: '$(Build.Repository.LocalPath)/$(workingDirectory)'
-         customCommand: 'run build export $(Build.Repository.LocalPath)/ $(adfResourcePath) "armTemplate"'
+         customCommand: 'run build export $(Build.Repository.LocalPath)/$(workingDirectory)/ $(adfResourcePath) "armTemplate"'
      - task: PublishPipelineArtifact@1
        inputs:
          targetPath: '$(Build.Repository.LocalPath)/$(workingDirectory)/armTemplate'
