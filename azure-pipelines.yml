@@ -100,7 +100,7 @@ stages:
      - task: toggle-adf-trigger@2
        displayName: 'Stop ADF Triggers in Production'
        inputs:
-         azureSubscription: 'PROD-SP'
+         azureSubscription: 'master-subscription-sc'
          ResourceGroupName: $(prodResourceGroupName)
          DatafactoryName: $(adfProdName)
          TriggerStatus: 'stop'
@@ -113,7 +113,7 @@ stages:
        displayName: 'Deploy ARM Template to Production'
        inputs:
          deploymentScope: 'Resource Group'
-         azureResourceManagerConnection: 'PROD-SP'
+         azureResourceManagerConnection: 'master-subscription-sc'
          subscriptionId: $(azureSubscriptionId)
          action: 'Create Or Update Resource Group'
          resourceGroupName: $(prodResourceGroupName)
@@ -126,7 +126,7 @@ stages:
      - task: toggle-adf-trigger@2
        displayName: 'Start ADF Triggers in Production'
        inputs:
-         azureSubscription: 'PROD-SP'
+         azureSubscription: 'master-subscription-sc'
          ResourceGroupName: $(prodResourceGroupName)
          DatafactoryName: $(adfProdName)
          TriggerStatus: 'start'
